@@ -1,0 +1,6 @@
+; Golden retriever thumbnail
+dogs.bmp (0, 0, 100, 200) retriever.bmp
+; German shepherd thumbnail
+dogs.bmp (100, 0, 100, 200) shepherd.bmp
+; Chihuahua thumbnail
+dogs.bmp (0, 200, 100, 200) chihuahua.bmp

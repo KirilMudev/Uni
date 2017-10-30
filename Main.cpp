@@ -2,6 +2,12 @@
 #include <fstream>
 
 const int FILENAME_BUFFER_SIZE = 256;
+const int HDR_POS_FULLSIZE = 2;
+const int HDR_POS_HDRSIZE = 10;
+const int HDR_POS_WIDTH = 18;
+const int HDR_POS_HEIGHT = 22;
+const short int HDR_POS_BITSPERPIXEL = 28;
+const int HDR_POS_SIZEINBYTES = 34;
 
 int calculateRowSize(int sourceWidth, short int bitsPerPixel);
 int calculateOffSetZeroes(int width, double pixelSizeInBytes);
@@ -19,7 +25,7 @@ int main(int __argc, char* __argv[])
 {
 	if(__argc < 2)
 	{
-		std::cout << "Not enough arguments. You need to supply at least one .tdf file." << std::endl;
+		std::cout << "Not enough arguments. You need to supply at least one .tdf file.";
 		exit(1);
 	}
 	else
@@ -28,7 +34,7 @@ int main(int __argc, char* __argv[])
 		{
 			readTDF(__argv[i]);
 		} 
-	}
+	} 
 
 	system("pause");
 	return 0;
@@ -45,10 +51,10 @@ void readTDF(char* filename)
 		while(!ifs.eof())
 		{
 			lineCounter++;
-
 			char c;
 			ifs >> c;
-			if(c == ';') 
+
+			if(c == ';' || c == '\n') 
 			{
 				while(ifs.get(c) && c != '\n');
 			}
@@ -88,12 +94,12 @@ void readTDF(char* filename)
 				while(ifs.get(c) && c != '\n');
 
 				//test cout
-				std::cout << sourceImageName << " " << x << " " << y << " " << width << " " << height << " " << destImageName << '\n';
+				//std::cout << sourceImageName << " " << x << " " << y << " " << width << " " << height << " " << destImageName << '\n';
 
 				//NOW THE BITMAP PART
 				if (!cropBMP(sourceImageName, x, y, width, height, destImageName))
 				{
-					std::cout << " Line: " << lineCounter << '\n'; 
+					std::cout << "File: " << filename << " Line: " << lineCounter << '\n'; 
 				}			
 			}		
 		}
@@ -120,9 +126,9 @@ bool cropBMP(char* source, int x, int y, int destWidth, int destHeight, char* de
 		else
 		{
 			int sourceWidth, sourceHeight;
-			ifs.seekg(18, std::ios::beg);
+			ifs.seekg(HDR_POS_WIDTH, std::ios::beg);
 			ifs.read((char*)&sourceWidth, sizeof(sourceWidth));
-			ifs.seekg(22, std::ios::beg);
+			ifs.seekg(HDR_POS_HEIGHT, std::ios::beg);
 			ifs.read((char*)&sourceHeight, sizeof(sourceHeight));
 
 			if(x < 0 || x > sourceWidth || y < 0 || y > sourceHeight)
@@ -138,67 +144,78 @@ bool cropBMP(char* source, int x, int y, int destWidth, int destHeight, char* de
 
 			//read source info from header
 			int headerSize;
-			ifs.seekg(10, std::ios::beg);
+			ifs.seekg(HDR_POS_HDRSIZE, std::ios::beg);
 			ifs.read((char*)&headerSize, sizeof(headerSize));
 			
 			short int bitsPerPixel;
-			ifs.seekg(28, std::ios::beg);
+			ifs.seekg(HDR_POS_BITSPERPIXEL, std::ios::beg);
 			ifs.read((char*)&bitsPerPixel, sizeof(bitsPerPixel)); 
 
 			ifs.seekg(0, std::ios::beg); //return to beginning
 
-			double pixelSizeInBytes = (double)bitsPerPixel / 8; //well, well....
+			double pixelSizeInBytes = (double)bitsPerPixel / 8; //magic tricks
 
-			int sourceRowSize = calcRow(sourceWidth, bitsPerPixel);
-				
+			int sourceRowSize = calcRow(sourceWidth, bitsPerPixel);	
 
 			//time for ofstream
 			std::ofstream ofs(destination, std::ios::out | std::ios::binary);
-
-			int destOffSetZeroes = calculateOffSetZeroes(destWidth, pixelSizeInBytes);
-			int destRowSize = calcRow(destWidth, bitsPerPixel);
-
-			int destRawBitmap = destHeight * destRowSize;
-			int destFullSize = destRawBitmap + headerSize;
-
-			//copy header
-			char * header = new char[headerSize];
-			ifs.read(header, headerSize);
-			ofs.write(header, headerSize);
-
-			//adjust new header
-			ofs.seekp(2, std::ios::beg);
-			ofs.write((char*)&destFullSize, sizeof(destFullSize));
-			ofs.seekp(18, std::ios::beg);
-			ofs.write((char*)&destWidth, sizeof(destWidth));
-			ofs.seekp(22, std::ios::beg);
-			ofs.write((char*)&destHeight, sizeof(destHeight));
-			ofs.seekp(34, std::ios::beg);
-			ofs.write((char*)&destRawBitmap, sizeof(destRawBitmap));
 			
-			//seek to end of header
-			ofs.seekp(headerSize, std::ios::beg);
-
-			//copy procedure
-			
-			int counter = 0;
-			while (counter != destHeight)
+			if(ofs)
 			{
-				ifs.seekg(headerSize + sourceRowSize*(y + counter), std::ios::beg);
-				char bigBuffer[12288]; 
-				ifs.seekg(x*pixelSizeInBytes, std::ios::cur);
-				ifs.read(bigBuffer, destRowSize-destOffSetZeroes);
-				ofs.write(bigBuffer, destRowSize);
-				counter++;			
-			}
+				int destOffSetZeroes = calculateOffSetZeroes(destWidth, pixelSizeInBytes);
+				int destRowSize = calcRow(destWidth, bitsPerPixel);
 
-			ofs.close();
-			ifs.close();
+				int destRawBitmap = destHeight * destRowSize;
+				int destFullSize = destRawBitmap + headerSize;
+
+				//copy header
+				char * header = new char[headerSize];
+				ifs.read(header, headerSize);
+				ofs.write(header, headerSize);
+			
+				delete[] header;
+
+				//adjust new header
+				ofs.seekp(HDR_POS_FULLSIZE, std::ios::beg);
+				ofs.write((char*)&destFullSize, sizeof(destFullSize));
+				ofs.seekp(HDR_POS_WIDTH, std::ios::beg);
+				ofs.write((char*)&destWidth, sizeof(destWidth));
+				ofs.seekp(HDR_POS_HEIGHT, std::ios::beg);
+				ofs.write((char*)&destHeight, sizeof(destHeight));
+				ofs.seekp(HDR_POS_SIZEINBYTES, std::ios::beg);
+				ofs.write((char*)&destRawBitmap, sizeof(destRawBitmap));
+			
+				//seek to end of header
+				ofs.seekp(headerSize, std::ios::beg);
+
+				//cut procedure	
+				char * rowBuffer = new char[destRowSize](); //will be full of 0s. should put in try block
+				int counter = 0;
+				while (counter != destHeight)
+				{
+					ifs.seekg(headerSize + sourceRowSize*(y + counter), std::ios::beg);
+					ifs.seekg((int)(x*pixelSizeInBytes), std::ios::cur);
+					ifs.read(rowBuffer, (destRowSize-destOffSetZeroes));
+					ofs.write(rowBuffer, destRowSize);
+					counter++;			
+				}
+
+				delete[] rowBuffer;
+				ofs.close();
+				ifs.close();
+			}
+			else
+			{
+				std::cout << "Error creating file: " << destination<< '\n';
+				return false;
+			}
+			
 		}	
 	}
 	else
 	{
-		std::cout << "Error opening: " << source << '\m';
+		std::cout << "Error opening: " << source << '\n';
+		return false;
 	}
 	
 	return true;
@@ -303,5 +320,6 @@ bool isBMP(std::ifstream& ifs)
 
 int calcRow(int width, int bitsPerPixel)
 {
+	//formula from documentation
 	return ((width*bitsPerPixel + 31) / 32) * 4;
 }
